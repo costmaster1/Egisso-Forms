@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block title %}Страница регистрации данных{% endblock %}
+
+{% block styles %}{% endblock %}
+
+{% block content %}
+
+<div class="container-fluid">
+
+    <div class="row">
+
+        <div class="col">
+            <h1>Данные заявителя (родителя)</h1>
+
+         <form method="POST" action="">
+            {{ form.hidden_tag() }}
+         <p>
+            {{ form.SNILS_recip.label }}<br>
+            {{ form.SNILS_recip(size=32) }}<br>
+
+            {{ form.FamilyName_recip.label }}<br>
+            {{ form.FamilyName_recip(size=32) }}<br>
+
+            {{ form.Name_recip.label }}<br>
+            {{ form.Name_recip(size=20) }}<br>
+
+            {{ form.Patronymic_recip.label }}<br>
+            {{ form.Patronymic_recip(size=35) }}<br>
+
+            {{ form.Gender_recip.label }}<br>
+            {{ form.Gender_recip(size=1) }}<br>
+
+            {{ form.BirthDate_recip.label }}<br>
+            {{ form.BirthDate_recip(type='date') }}<br>
+
+            {{ form.doc_Series_recip.label }}<br>
+            {{ form.doc_Series_recip(size=4) }}<br>
+
+            {{ form.doc_Number_recip.label }}<br>
+            {{ form.doc_Number_recip(size=6) }}<br>
+
+            {{ form.doc_IssueDate_recip.label }}<br>
+            {{ form.doc_IssueDate_recip(type='date') }}<br>
+
+            {{ form.doc_Issuer_recip.label }}<br>
+            {{ form.doc_Issuer_recip(size=100) }}<br>
+
+            {% for error in form.SNILS_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+            {% endfor %}
+
+             {% for error in form.FamilyName_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.Name_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.Patronymic_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.Gender_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.BirthDate_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_Series_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_Number_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_IssueDate_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_Issuer_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+        
+       
+
+             <p>{{ form.submit() }}</p>
+             </form>
+
+
+             {% with messages = get_flashed_messages(with_categories=true) %}
+             {% if messages %}
+             {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+             {% endfor %}
+             {% endif %}
+             {% endwith %}
+       </div>
+
+
+
+       <div class="col">
+            <h1>Данные основания (ребенка)</h1>
+
+         <form method="POST" action="">
+            {{ form.hidden_tag() }}
+         <p>
+            {{ form.SNILS_recip.label }}<br>
+            {{ form.SNILS_recip(size=32) }}<br>
+
+            {{ form.FamilyName_recip.label }}<br>
+            {{ form.FamilyName_recip(size=32) }}<br>
+
+            {{ form.Name_recip.label }}<br>
+            {{ form.Name_recip(size=20) }}<br>
+
+            {{ form.Patronymic_recip.label }}<br>
+            {{ form.Patronymic_recip(size=35) }}<br>
+
+            {{ form.Gender_recip.label }}<br>
+            {{ form.Gender_recip(size=1) }}<br>
+
+            {{ form.BirthDate_recip.label }}<br>
+            {{ form.BirthDate_recip(type='date') }}<br>
+
+            {{ form.doc_Series_recip.label }}<br>
+            {{ form.doc_Series_recip(size=4) }}<br>
+
+            {{ form.doc_Number_recip.label }}<br>
+            {{ form.doc_Number_recip(size=6) }}<br>
+
+            {{ form.doc_IssueDate_recip.label }}<br>
+            {{ form.doc_IssueDate_recip(type='date') }}<br>
+
+            {{ form.doc_Issuer_recip.label }}<br>
+            {{ form.doc_Issuer_recip(size=100) }}<br>
+
+            {% for error in form.SNILS_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+            {% endfor %}
+
+             {% for error in form.FamilyName_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.Name_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.Patronymic_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.Gender_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.BirthDate_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_Series_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_Number_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_IssueDate_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+             {% for error in form.doc_Issuer_recip.errors %}
+                <span style="color: red;">{{ error }}</span><br>
+             {% endfor %}
+
+        
+       
+
+             <p>{{ form.submit() }}</p>
+             </form>
+
+
+             {% with messages = get_flashed_messages(with_categories=true) %}
+             {% if messages %}
+             {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+             {% endfor %}
+             {% endif %}
+             {% endwith %}
+       </div>
+
+    <!--</div>
+
+    <div class="row">
+        <div class="col"><p>{{ form.submit() }}</p></div>
+    </div>-->
+
+
+    <!--<div class="row">
+        <div class="col">
+            <h3>
+             {% with messages = get_flashed_messages(with_categories=true) %}
+             {% if messages %}
+             {% for category, message in messages %}
+                <p class="{{ category }}">{{ message }}</p>
+             {% endfor %}
+             {% endif %}
+             {% endwith %}
+            </h3>
+        </div>
+    </div>-->
+        
+</div>        
+
+
+{% endblock %}

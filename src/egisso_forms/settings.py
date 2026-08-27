@@ -1,0 +1,7 @@
+rectype = 'Fact'
+assignmentfactuid = 'test'
+lmszid = 'test'
+categoryid = 'test'
+onmszcode = 'test'
+lmszprovidercode = 'test'
+providercode = 'test'  
