@@ -21,8 +21,8 @@ from series_pasport_validator_form import passport_series_validator
 from namber_pasport_validator_form import passport_number_validator
 from issuer_validator_form import issuing_authority_validator
 
-# Импортируем настройки
-from settings import rectype, assignmentfactuid, categoryid, lmszid, onmszcode, lmszprovidercode, providercode
+# Импортируем настройки по умолчанию
+from settings import DEFAULT_SETTINGS
 
 # ==================== НАСТРОЙКА СТРАНИЦЫ ====================
 st.set_page_config(
@@ -42,6 +42,15 @@ if not os.path.exists(DB_DIR):
     os.makedirs(DB_DIR)
 
 DATABASE = os.path.join(DB_DIR, 'egisso.db')
+
+# Глобальные переменные для настроек (будут загружены из БД)
+rectype = DEFAULT_SETTINGS['rectype']
+assignmentfactuid = DEFAULT_SETTINGS['assignmentfactuid']
+lmszid = DEFAULT_SETTINGS['lmszid']
+categoryid = DEFAULT_SETTINGS['categoryid']
+onmszcode = DEFAULT_SETTINGS['onmszcode']
+lmszprovidercode = DEFAULT_SETTINGS['lmszprovidercode']
+providercode = DEFAULT_SETTINGS['providercode']
 
 # ==================== ФОРМА WTForms ====================
 
@@ -110,6 +119,8 @@ def init_db():
     try:
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
+        
+        # Таблица пользователей
         cursor.execute('''CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             RecType TEXT NOT NULL,
@@ -156,6 +167,36 @@ def init_db():
             comment TEXT NOT NULL,
             equivalentAmount TEXT NOT NULL
         )''')
+        
+        # Таблица настроек
+        cursor.execute('''CREATE TABLE IF NOT EXISTS settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            setting_key TEXT UNIQUE NOT NULL,
+            setting_value TEXT NOT NULL,
+            description TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        
+        # Проверяем, есть ли настройки в БД, если нет - добавляем по умолчанию
+        cursor.execute("SELECT COUNT(*) FROM settings")
+        count = cursor.fetchone()[0]
+        
+        if count == 0:
+            # Добавляем настройки по умолчанию
+            default_settings = [
+                ('rectype', DEFAULT_SETTINGS['rectype'], 'Тип записи'),
+                ('assignmentfactuid', DEFAULT_SETTINGS['assignmentfactuid'], 'UUID назначения'),
+                ('lmszid', DEFAULT_SETTINGS['lmszid'], 'ID ЛМСЗ'),
+                ('categoryid', DEFAULT_SETTINGS['categoryid'], 'ID категории'),
+                ('onmszcode', DEFAULT_SETTINGS['onmszcode'], 'Код ОНМСЗ'),
+                ('lmszprovidercode', DEFAULT_SETTINGS['lmszprovidercode'], 'Код поставщика ЛМСЗ'),
+                ('providercode', DEFAULT_SETTINGS['providercode'], 'Код поставщика')
+            ]
+            cursor.executemany(
+                "INSERT INTO settings (setting_key, setting_value, description) VALUES (?, ?, ?)",
+                default_settings
+            )
+        
         conn.commit()
         conn.close()
         return True
@@ -171,6 +212,64 @@ def get_db():
     except Exception as e:
         st.error(f"❌ Ошибка подключения к БД: {str(e)}")
         return None
+
+
+def load_settings():
+    """Загружает настройки из БД в глобальные переменные."""
+    global rectype, assignmentfactuid, lmszid, categoryid, onmszcode, lmszprovidercode, providercode
+    
+    try:
+        conn = get_db()
+        if conn is None:
+            return False
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT setting_key, setting_value FROM settings")
+        rows = cursor.fetchall()
+        conn.close()
+        
+        for key, value in rows:
+            if key == 'rectype':
+                rectype = value
+            elif key == 'assignmentfactuid':
+                assignmentfactuid = value
+            elif key == 'lmszid':
+                lmszid = value
+            elif key == 'categoryid':
+                categoryid = value
+            elif key == 'onmszcode':
+                onmszcode = value
+            elif key == 'lmszprovidercode':
+                lmszprovidercode = value
+            elif key == 'providercode':
+                providercode = value
+        
+        return True
+    except Exception as e:
+        st.error(f"❌ Ошибка загрузки настроек: {str(e)}")
+        return False
+
+
+def save_settings_to_db(settings_dict):
+    """Сохраняет настройки в БД."""
+    try:
+        conn = get_db()
+        if conn is None:
+            return False
+        
+        cursor = conn.cursor()
+        for key, value in settings_dict.items():
+            cursor.execute(
+                "UPDATE settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?",
+                (value, key)
+            )
+        
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        st.error(f"❌ Ошибка сохранения настроек: {str(e)}")
+        return False
 
 
 # ==================== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ВАЛИДАЦИИ ====================
@@ -355,66 +454,18 @@ def show_register():
                     
                     cursor = conn.cursor()
                     
-                    # ============================================================
-                    # ПОДГОТОВКА 43 ЗНАЧЕНИЙ ДЛЯ INSERT
-                    # ============================================================
+                    # Используем загруженные настройки
                     values = [
-                        # 1-7: Первые 7 полей (из settings.py)
-                        rectype,           # 1  - RecType
-                        assignmentfactuid, # 2  - assignmentFactUuid
-                        lmszid,            # 3  - LMSZID
-                        categoryid,        # 4  - categoryID
-                        onmszcode,         # 5  - ONMSZCode
-                        lmszprovidercode,  # 6  - LMSZProviderCode
-                        providercode,      # 7  - providerCode
-                        
-                        # 8-18: Данные родителя (11 полей)
-                        snils,                                          # 8  - SNILS_recip
-                        family_name,                                    # 9  - FamilyName_recip
-                        name,                                           # 10 - Name_recip
-                        patronymic,                                     # 11 - Patronymic_recip
-                        gender,                                         # 12 - Gender_recip
-                        birth_date.isoformat() if birth_date else '',  # 13 - BirthDate_recip
-                        '',                                             # 14 - doctype_recip
-                        doc_series,                                     # 15 - doc_Series_recip
-                        doc_number,                                     # 16 - doc_Number_recip
-                        doc_issue_date.isoformat() if doc_issue_date else '',  # 17 - doc_IssueDate_recip
-                        doc_issuer,                                     # 18 - doc_Issuer_recip
-                        
-                        # 19-25: Данные представителя (7 полей) - все пустые
-                        '',  # 19 - SNILS_reason
-                        '',  # 20 - FamilyName_reason
-                        '',  # 21 - Name_reason
-                        '',  # 22 - Patronymic_reason
-                        '',  # 23 - Gender_reason
-                        '',  # 24 - BirthDate_reason
-                        
-                        # 25: Степень родства
-                        '',  # 25 - kinshipTypeCode
-                        
-                        # 26-30: Документы представителя (5 полей) - все пустые
-                        '',  # 26 - doctype_reason
-                        '',  # 27 - doc_Series_reason
-                        '',  # 28 - doc_Number_reason
-                        '',  # 29 - doc_IssueDate_reason
-                        '',  # 30 - doc_Issuer_reason
-                        
-                        # 31-37: Остальные поля (7 полей) - все пустые
-                        '',  # 31 - decision_date
-                        '',  # 32 - dateStart
-                        '',  # 33 - dateFinish
-                        '',  # 34 - usingSign
-                        '',  # 35 - criteria
-                        '',  # 36 - criteriaCode
-                        
-                        # 37-43: Последние 7 полей
-                        '',  # 37 - FormCode
-                        '',  # 38 - amount
-                        '',  # 39 - measuryCode
-                        '',  # 40 - monetization
-                        '',  # 41 - content
-                        '',  # 42 - comment
-                        ''   # 43 - equivalentAmount
+                        rectype, assignmentfactuid, lmszid, categoryid, onmszcode, lmszprovidercode, providercode,
+                        snils, family_name, name, patronymic, gender, 
+                        birth_date.isoformat() if birth_date else '',
+                        '', doc_series, doc_number, 
+                        doc_issue_date.isoformat() if doc_issue_date else '',
+                        doc_issuer,
+                        '', '', '', '', '', '',
+                        '', '', '', '', '', '',
+                        '', '', '', '', '', '',
+                        '', '', '', '', '', '', ''
                     ]
                     
                     # Проверяем количество значений
@@ -422,7 +473,6 @@ def show_register():
                         st.error(f"❌ Ошибка: ожидается 43 значения, получено {len(values)}")
                         return
                     
-                    # Выполняем INSERT
                     cursor.execute('''INSERT INTO users (
                         RecType, assignmentFactUuid, LMSZID, categoryID, ONMSZCode, LMSZProviderCode, providerCode,
                         SNILS_recip, FamilyName_recip, Name_recip, Patronymic_recip, Gender_recip, BirthDate_recip,
@@ -445,6 +495,7 @@ def show_register():
                 except Exception as e:
                     st.error(f"❌ Ошибка при сохранении: {str(e)}")
 
+
 def show_success():
     """Страница успешной регистрации."""
     st.title("✅ Регистрация прошла успешно!")
@@ -462,19 +513,181 @@ def show_success():
             st.rerun()
 
 
+def show_settings():
+    """Страница настроек приложения."""
+    st.title("⚙️ Настройки ЕГИССО")
+    st.caption("Управление системными настройками для полей RecType, assignmentFactUuid и др.")
+    
+    # Загружаем текущие настройки из БД
+    try:
+        conn = get_db()
+        if conn is None:
+            st.error("❌ Нет подключения к базе данных")
+            return
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT setting_key, setting_value, description FROM settings ORDER BY setting_key")
+        settings_data = cursor.fetchall()
+        conn.close()
+        
+        # Создаем словарь для удобства
+        settings_dict = {row[0]: {'value': row[1], 'description': row[2]} for row in settings_data}
+        
+        # Отображаем форму настроек
+        with st.form("settings_form"):
+            st.subheader("📝 Основные настройки")
+            st.info("Эти значения будут использоваться при создании новых записей")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                new_rectype = st.text_input(
+                    "RecType (Тип записи)",
+                    value=settings_dict.get('rectype', {}).get('value', ''),
+                    help="Тип записи, по умолчанию 'Fact'"
+                )
+                
+                new_assignmentfactuid = st.text_input(
+                    "assignmentFactUuid (UUID назначения)",
+                    value=settings_dict.get('assignmentfactuid', {}).get('value', ''),
+                    help="UUID назначения факта"
+                )
+                
+                new_lmszid = st.text_input(
+                    "LMSZID (ID ЛМСЗ)",
+                    value=settings_dict.get('lmszid', {}).get('value', ''),
+                    help="Идентификатор ЛМСЗ"
+                )
+                
+                new_categoryid = st.text_input(
+                    "categoryID (ID категории)",
+                    value=settings_dict.get('categoryid', {}).get('value', ''),
+                    help="Идентификатор категории"
+                )
+            
+            with col2:
+                new_onmszcode = st.text_input(
+                    "ONMSZCode (Код ОНМСЗ)",
+                    value=settings_dict.get('onmszcode', {}).get('value', ''),
+                    help="Код ОНМСЗ"
+                )
+                
+                new_lmszprovidercode = st.text_input(
+                    "LMSZProviderCode (Код поставщика ЛМСЗ)",
+                    value=settings_dict.get('lmszprovidercode', {}).get('value', ''),
+                    help="Код поставщика ЛМСЗ"
+                )
+                
+                new_providercode = st.text_input(
+                    "providerCode (Код поставщика)",
+                    value=settings_dict.get('providercode', {}).get('value', ''),
+                    help="Код поставщика"
+                )
+            
+            st.divider()
+            st.caption("Все поля обязательны для заполнения")
+            
+            # Кнопки
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                submitted = st.form_submit_button("💾 Сохранить настройки", type="primary", use_container_width=True)
+            with col_btn2:
+                reset = st.form_submit_button("🔄 Сбросить к значениям по умолчанию", use_container_width=True)
+            
+            if submitted:
+                if not all([new_rectype, new_assignmentfactuid, new_lmszid, new_categoryid, 
+                           new_onmszcode, new_lmszprovidercode, new_providercode]):
+                    st.error("❌ Все поля должны быть заполнены!")
+                else:
+                    # Сохраняем настройки
+                    settings_to_save = {
+                        'rectype': new_rectype,
+                        'assignmentfactuid': new_assignmentfactuid,
+                        'lmszid': new_lmszid,
+                        'categoryid': new_categoryid,
+                        'onmszcode': new_onmszcode,
+                        'lmszprovidercode': new_lmszprovidercode,
+                        'providercode': new_providercode
+                    }
+                    
+                    if save_settings_to_db(settings_to_save):
+                        # Перезагружаем настройки
+                        load_settings()
+                        st.success("✅ Настройки успешно сохранены!")
+                        st.balloons()
+                        st.rerun()
+                    else:
+                        st.error("❌ Ошибка при сохранении настроек")
+            
+            if reset:
+                # Сбрасываем к значениям по умолчанию
+                settings_to_save = {
+                    'rectype': DEFAULT_SETTINGS['rectype'],
+                    'assignmentfactuid': DEFAULT_SETTINGS['assignmentfactuid'],
+                    'lmszid': DEFAULT_SETTINGS['lmszid'],
+                    'categoryid': DEFAULT_SETTINGS['categoryid'],
+                    'onmszcode': DEFAULT_SETTINGS['onmszcode'],
+                    'lmszprovidercode': DEFAULT_SETTINGS['lmszprovidercode'],
+                    'providercode': DEFAULT_SETTINGS['providercode']
+                }
+                
+                if save_settings_to_db(settings_to_save):
+                    load_settings()
+                    st.success("🔄 Настройки сброшены к значениям по умолчанию!")
+                    st.rerun()
+                else:
+                    st.error("❌ Ошибка при сбросе настроек")
+        
+        # Отображаем текущие значения
+        st.divider()
+        st.subheader("📊 Текущие значения настроек")
+        
+        # Показываем в виде таблицы
+        settings_df = pd.DataFrame([
+            {
+                'Ключ': row[0],
+                'Значение': row[1],
+                'Описание': row[2]
+            }
+            for row in settings_data
+        ])
+        st.dataframe(settings_df, use_container_width=True, hide_index=True)
+        
+        # Показываем значения, которые используются сейчас
+        st.subheader("🔧 Активные настройки")
+        st.json({
+            'rectype': rectype,
+            'assignmentfactuid': assignmentfactuid,
+            'lmszid': lmszid,
+            'categoryid': categoryid,
+            'onmszcode': onmszcode,
+            'lmszprovidercode': lmszprovidercode,
+            'providercode': providercode
+        })
+        
+    except Exception as e:
+        st.error(f"❌ Ошибка загрузки настроек: {str(e)}")
+
+
 # ==================== ОСНОВНОЕ ПРИЛОЖЕНИЕ ====================
 
 def main():
     """Главная функция приложения."""
+    # Инициализация БД
     if not init_db():
         st.error("❌ Не удалось инициализировать базу данных")
         return
     
+    # Загрузка настроек из БД
+    load_settings()
+    
+    # Боковая панель навигации
     st.sidebar.title("📌 Навигация")
     
     if "page" not in st.session_state:
         st.session_state.page = "index"
     
+    # Кнопки навигации
     if st.sidebar.button("📋 Главная", use_container_width=True):
         st.session_state.page = "index"
         st.rerun()
@@ -484,14 +697,24 @@ def main():
         st.rerun()
     
     st.sidebar.divider()
+    st.sidebar.subheader("🔧 Администрирование")
+    
+    if st.sidebar.button("⚙️ Настройки", use_container_width=True):
+        st.session_state.page = "settings"
+        st.rerun()
+    
+    st.sidebar.divider()
     st.sidebar.info("📊 Версия 1.0.0")
     
+    # Отображение выбранной страницы
     if st.session_state.page == "index":
         show_index()
     elif st.session_state.page == "register":
         show_register()
     elif st.session_state.page == "success":
         show_success()
+    elif st.session_state.page == "settings":
+        show_settings()
     else:
         show_index()
 
