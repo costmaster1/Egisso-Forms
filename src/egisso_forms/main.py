@@ -9,8 +9,8 @@ from flask import Flask, current_app
 
 # Импортируем Flask-WTF формы и валидаторы
 from flask_wtf import FlaskForm
-from wtforms import StringField, DateField, SubmitField
-from wtforms.validators import DataRequired
+from wtforms import StringField, DateField, SubmitField, SelectField, TextAreaField
+from wtforms.validators import DataRequired, Optional
 
 # Импортируем существующие валидаторы
 from snils_validator_form import snils_validator
@@ -43,7 +43,7 @@ if not os.path.exists(DB_DIR):
 
 DATABASE = os.path.join(DB_DIR, 'egisso.db')
 
-# Глобальные переменные для настроек (будут загружены из БД)
+# Глобальные переменные для настроек
 rectype = DEFAULT_SETTINGS['rectype']
 assignmentfactuid = DEFAULT_SETTINGS['assignmentfactuid']
 lmszid = DEFAULT_SETTINGS['lmszid']
@@ -54,74 +54,177 @@ providercode = DEFAULT_SETTINGS['providercode']
 
 # ==================== ФОРМА WTForms ====================
 
-class Egisso_School(FlaskForm):
-    """Класс формы с использованием WTForms валидаторов"""
+class ChildCardForm(FlaskForm):
+    """Форма для карточки ребенка (заявителя) - строго по шаблону"""
     class Meta:
         csrf = False
     
-    SNILS_recip = StringField('СНИЛС-Заявителя (родителя)', validators=[
+    # ===== ДАННЫЕ ПОЛУЧАТЕЛЯ (SNILS_recip) =====
+    SNILS_recip = StringField('СНИЛС получателя', validators=[
         DataRequired(message='Обязательное поле для ввода'),
         snils_validator
     ])
-
-    FamilyName_recip = StringField('Фамилия-заявителя (родителя)', validators=[
+    
+    FamilyName_recip = StringField('Фамилия получателя', validators=[
         DataRequired(message='Обязательное поле для ввода'),
         latin_name_validator
-    ])
-
-    Name_recip = StringField('Имя-заявителя (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        latin_name_validator
-    ])
-
-    Patronymic_recip = StringField('Отчество-заявителя (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        latin_name_validator
-    ])
-
-    Gender_recip = StringField('Пол-заявителя (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        gender_validator
-    ])
-
-    BirthDate_recip = DateField('Дата рождения-заявителя (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        validate_age
-    ])
-
-    doc_Series_recip = StringField('Серия паспорта-заявителя (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        passport_series_validator
-    ])
-
-    doc_Number_recip = StringField('Номер паспорта-заявителя (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        passport_number_validator
-    ])
-
-    doc_IssueDate_recip = DateField('Дата выдачи паспорта (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        validate_age
-    ])
-
-    doc_Issuer_recip = StringField('Кем выдан паспорт (родителя)', validators=[
-        DataRequired(message='Обязательное поле для ввода'),
-        issuing_authority_validator
     ])
     
-    submit = SubmitField('Отправить')
+    Name_recip = StringField('Имя получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода'),
+        latin_name_validator
+    ])
+    
+    Patronymic_recip = StringField('Отчество получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода'),
+        latin_name_validator
+    ])
+    
+    Gender_recip = SelectField('Пол получателя', choices=[
+        ('', 'Выберите пол'),
+        ('М', 'Мужской'),
+        ('Ж', 'Женский')
+    ], validators=[DataRequired(message='Обязательное поле для ввода')])
+    
+    BirthDate_recip = DateField('Дата рождения получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода')
+    ])
+    
+    doctype_recip = SelectField('Тип документа получателя', choices=[
+        ('', 'Выберите тип документа'),
+        ('01', 'Паспорт гражданина РФ'),
+        ('02', 'Загранпаспорт'),
+        ('03', 'Свидетельство о рождении'),
+        ('04', 'Другой документ')
+    ], validators=[DataRequired(message='Обязательное поле для ввода')])
+    
+    doc_Series_recip = StringField('Серия документа получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода')
+    ])
+    
+    doc_Number_recip = StringField('Номер документа получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода')
+    ])
+    
+    doc_IssueDate_recip = DateField('Дата выдачи документа получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода')
+    ])
+    
+    doc_Issuer_recip = TextAreaField('Кем выдан документ получателя', validators=[
+        DataRequired(message='Обязательное поле для ввода')
+    ])
+    
+    # ===== ДАННЫЕ ПРЕДСТАВИТЕЛЯ (reason) =====
+    SNILS_reason = StringField('СНИЛС представителя', validators=[
+        Optional(),
+        snils_validator
+    ])
+    
+    FamilyName_reason = StringField('Фамилия представителя', validators=[
+        Optional(),
+        latin_name_validator
+    ])
+    
+    Name_reason = StringField('Имя представителя', validators=[
+        Optional(),
+        latin_name_validator
+    ])
+    
+    Patronymic_reason = StringField('Отчество представителя', validators=[
+        Optional(),
+        latin_name_validator
+    ])
+    
+    Gender_reason = SelectField('Пол представителя', choices=[
+        ('', 'Выберите пол'),
+        ('М', 'Мужской'),
+        ('Ж', 'Женский')
+    ], validators=[Optional()])
+    
+    BirthDate_reason = DateField('Дата рождения представителя', validators=[
+        Optional()
+    ])
+    
+    kinshipTypeCode = SelectField('Степень родства', choices=[
+        ('', 'Выберите степень родства'),
+        ('01', 'Родитель'),
+        ('02', 'Опекун'),
+        ('03', 'Попечитель'),
+        ('04', 'Усыновитель'),
+        ('05', 'Законный представитель')
+    ], validators=[Optional()])
+    
+    doctype_reason = SelectField('Тип документа представителя', choices=[
+        ('', 'Выберите тип документа'),
+        ('01', 'Паспорт гражданина РФ'),
+        ('02', 'Загранпаспорт'),
+        ('03', 'Свидетельство о рождении'),
+        ('04', 'Другой документ')
+    ], validators=[Optional()])
+    
+    doc_Series_reason = StringField('Серия документа представителя', validators=[
+        Optional()
+    ])
+    
+    doc_Number_reason = StringField('Номер документа представителя', validators=[
+        Optional()
+    ])
+    
+    doc_IssueDate_reason = DateField('Дата выдачи документа представителя', validators=[
+        Optional()
+    ])
+    
+    doc_Issuer_reason = TextAreaField('Кем выдан документ представителя', validators=[
+        Optional()
+    ])
+    
+    # ===== ДОПОЛНИТЕЛЬНЫЕ ПАРАМЕТРЫ =====
+    decision_date = DateField('Дата решения', validators=[Optional()])
+    dateStart = DateField('Дата начала', validators=[Optional()])
+    dateFinish = DateField('Дата окончания', validators=[Optional()])
+    usingSign = SelectField('Признак использования', choices=[
+        ('', 'Выберите'),
+        ('Нет', 'Нет'),
+        ('Да', 'Да')
+    ], validators=[Optional()])
+    criteria = StringField('Критерий', validators=[Optional()])
+    criteriaCode = StringField('Код критерия', validators=[Optional()])
+    FormCode = SelectField('Код формы', choices=[
+        ('', 'Выберите'),
+        ('01', 'Форма 01'),
+        ('02', 'Форма 02'),
+        ('03', 'Форма 03')
+    ], validators=[Optional()])
+    amount = StringField('Сумма', validators=[Optional()])
+    measuryCode = SelectField('Код измерения', choices=[
+        ('', 'Выберите'),
+        ('01', 'Рубли'),
+        ('02', 'Проценты')
+    ], validators=[Optional()])
+    monetization = SelectField('Монетизация', choices=[
+        ('', 'Выберите'),
+        ('Нет', 'Нет'),
+        ('Да', 'Да')
+    ], validators=[Optional()])
+    content = TextAreaField('Содержание', validators=[Optional()])
+    comment = TextAreaField('Комментарий', validators=[Optional()])
+    equivalentAmount = StringField('Эквивалентная сумма', validators=[Optional()])
+    
+    submit = SubmitField('Сохранить запись')
 
 
 # ==================== ФУНКЦИИ ДЛЯ РАБОТЫ С БД ====================
 
 def init_db():
-    """Инициализирует базу данных."""
+    """Инициализирует базу данных СТРОГО ПО ШАБЛОНУ."""
     try:
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         
-        # Таблица пользователей
-        cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+        # ============================================================
+        # ТАБЛИЦА children - СТРОГО ПО ШАБЛОНУ (43 колонки)
+        # ============================================================
+        cursor.execute('''CREATE TABLE IF NOT EXISTS children (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             RecType TEXT NOT NULL,
             assignmentFactUuid TEXT NOT NULL,
@@ -165,10 +268,13 @@ def init_db():
             monetization TEXT NOT NULL,
             content TEXT NOT NULL,
             comment TEXT NOT NULL,
-            equivalentAmount TEXT NOT NULL
+            equivalentAmount TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         
-        # Таблица настроек
+        # ============================================================
+        # ТАБЛИЦА settings - для настроек администратора
+        # ============================================================
         cursor.execute('''CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             setting_key TEXT UNIQUE NOT NULL,
@@ -177,12 +283,11 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         
-        # Проверяем, есть ли настройки в БД, если нет - добавляем по умолчанию
+        # Добавляем настройки по умолчанию
         cursor.execute("SELECT COUNT(*) FROM settings")
         count = cursor.fetchone()[0]
         
         if count == 0:
-            # Добавляем настройки по умолчанию
             default_settings = [
                 ('rectype', DEFAULT_SETTINGS['rectype'], 'Тип записи'),
                 ('assignmentfactuid', DEFAULT_SETTINGS['assignmentfactuid'], 'UUID назначения'),
@@ -272,8 +377,6 @@ def save_settings_to_db(settings_dict):
         return False
 
 
-# ==================== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ВАЛИДАЦИИ ====================
-
 def validate_form_field_with_context(form, field_name):
     """Валидация поля формы WTForms в контексте Flask приложения"""
     field = getattr(form, field_name)
@@ -293,153 +396,363 @@ def validate_form_field(form, field_name):
 
 # ==================== СТРАНИЦЫ ПРИЛОЖЕНИЯ ====================
 
-def show_index():
-    """Главная страница - просмотр записей."""
-    st.title("📋 Реестр заявителей ЕГИССО")
-    
-    conn = get_db()
-    if conn is None:
-        st.error("❌ Нет подключения к базе данных")
-        return
-    
-    try:
-        df = pd.read_sql_query("SELECT * FROM users ORDER BY id DESC", conn)
-        conn.close()
-        
-        if len(df) > 0:
-            st.success(f"✅ Всего записей: {len(df)}")
-            
-            columns_to_show = ['id', 'SNILS_recip', 'FamilyName_recip', 'Name_recip', 
-                              'Patronymic_recip', 'Gender_recip', 'BirthDate_recip']
-            show_cols = [col for col in columns_to_show if col in df.columns]
-            
-            st.dataframe(df[show_cols], use_container_width=True)
-            
-            st.subheader("🔍 Детальный просмотр записи")
-            ids = df['id'].tolist()
-            if ids:
-                selected_id = st.selectbox("Выберите ID для просмотра", ids)
-                if selected_id:
-                    record = df[df['id'] == selected_id].iloc[0]
-                    st.json(record.to_dict())
-        else:
-            st.info("📭 Нет записей в базе данных")
-    except Exception as e:
-        st.error(f"❌ Ошибка при загрузке данных: {str(e)}")
-
-
-def show_register():
-    """Страница регистрации нового заявителя с использованием WTForms."""
-    st.title("📝 Регистрация заявителя в ЕГИССО")
+def show_add_record():
+    """Страница добавления новой записи - СТРОГО ПО ШАБЛОНУ"""
+    st.title("📝 Добавление новой записи")
+    st.caption("Заполните все поля для создания записи в системе ЕГИССО (строго по шаблону)")
     
     with flask_app.app_context():
-        form = Egisso_School()
+        form = ChildCardForm()
     
-    with st.form("register_form", clear_on_submit=False):
-        st.header("👤 Данные заявителя (родителя)")
+    with st.form("add_record_form", clear_on_submit=False):
+        # ===== БЛОК 1: ДАННЫЕ ПОЛУЧАТЕЛЯ =====
+        st.header("👤 Данные получателя (SNILS_recip)")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            snils = st.text_input(
-                "СНИЛС (родителя)*",
+            snils_recip = st.text_input(
+                "СНИЛС получателя*",
                 value=form.SNILS_recip.data or "",
                 placeholder="XXX-XXX-XXX YY",
                 help="Формат: 123-456-789 01"
             )
             
-            family_name = st.text_input(
-                "Фамилия (родителя)*",
+            family_name_recip = st.text_input(
+                "Фамилия получателя*",
                 value=form.FamilyName_recip.data or "",
-                placeholder="Иванов",
-                help="Только кириллица, первая буква заглавная"
+                placeholder="Петрова"
             )
             
-            name = st.text_input(
-                "Имя (родителя)*",
+            name_recip = st.text_input(
+                "Имя получателя*",
                 value=form.Name_recip.data or "",
-                placeholder="Иван",
-                help="Только кириллица, первая буква заглавная"
+                placeholder="Анна"
             )
             
-            patronymic = st.text_input(
-                "Отчество (родителя)*",
+            patronymic_recip = st.text_input(
+                "Отчество получателя*",
                 value=form.Patronymic_recip.data or "",
-                placeholder="Иванович",
-                help="Только кириллица, первая буква заглавная"
+                placeholder="Васильевна"
             )
             
-            gender = st.selectbox(
-                "Пол (родителя)*",
+            gender_recip = st.selectbox(
+                "Пол получателя*",
                 options=["", "М", "Ж"],
-                index=0 if not form.Gender_recip.data else (1 if form.Gender_recip.data == "М" else 2),
-                help="Выберите пол"
+                index=0 if not form.Gender_recip.data else (1 if form.Gender_recip.data == "М" else 2)
             )
         
         with col2:
-            birth_date = st.date_input(
-                "Дата рождения (родителя)*",
+            birth_date_recip = st.date_input(
+                "Дата рождения получателя*",
                 value=form.BirthDate_recip.data or None,
                 min_value=date(1900, 1, 1),
-                max_value=date.today(),
-                help="Должно быть не менее 18 лет"
+                max_value=date.today()
             )
             
-            doc_series = st.text_input(
-                "Серия паспорта (родителя)*",
+            doctype_recip = st.selectbox(
+                "Тип документа получателя*",
+                options=["", "01", "02", "03", "04"],
+                format_func=lambda x: {
+                    "": "Выберите тип документа",
+                    "01": "Паспорт гражданина РФ",
+                    "02": "Загранпаспорт",
+                    "03": "Свидетельство о рождении",
+                    "04": "Другой документ"
+                }.get(x, x)
+            )
+            
+            doc_series_recip = st.text_input(
+                "Серия документа получателя*",
                 value=form.doc_Series_recip.data or "",
-                placeholder="1234",
-                help="Ровно 4 цифры"
+                placeholder="1317"
             )
             
-            doc_number = st.text_input(
-                "Номер паспорта (родителя)*",
+            doc_number_recip = st.text_input(
+                "Номер документа получателя*",
                 value=form.doc_Number_recip.data or "",
-                placeholder="123456",
-                help="Ровно 6 цифр"
+                placeholder="578098"
             )
-            
-            doc_issue_date = st.date_input(
-                "Дата выдачи паспорта (родителя)*",
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            doc_issue_date_recip = st.date_input(
+                "Дата выдачи документа получателя*",
                 value=form.doc_IssueDate_recip.data or None,
                 min_value=date(1900, 1, 1),
-                max_value=date.today(),
-                help="Дата выдачи паспорта"
+                max_value=date.today()
+            )
+        
+        with col4:
+            doc_issuer_recip = st.text_area(
+                "Кем выдан документ получателя*",
+                value=form.doc_Issuer_recip.data or "",
+                placeholder="УМВД РОССИИ ПО АРХАНГЕЛЬСКОЙ ОБЛАСТИ"
+            )
+        
+        # ===== БЛОК 2: ДАННЫЕ ПРЕДСТАВИТЕЛЯ =====
+        st.divider()
+        st.header("👥 Данные представителя (SNILS_reason)")
+        
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            snils_reason = st.text_input(
+                "СНИЛС представителя",
+                value=form.SNILS_reason.data or "",
+                placeholder="XXX-XXX-XXX YY"
             )
             
-            doc_issuer = st.text_area(
-                "Кем выдан паспорт (родителя)*",
-                value=form.doc_Issuer_recip.data or "",
-                placeholder="Отделом УФМС России по г. Москве",
-                help="Не менее 5 символов"
+            family_name_reason = st.text_input(
+                "Фамилия представителя",
+                value=form.FamilyName_reason.data or "",
+                placeholder="Иванова"
             )
+            
+            name_reason = st.text_input(
+                "Имя представителя",
+                value=form.Name_reason.data or "",
+                placeholder="Мария"
+            )
+            
+            patronymic_reason = st.text_input(
+                "Отчество представителя",
+                value=form.Patronymic_reason.data or "",
+                placeholder="Петровна"
+            )
+        
+        with col6:
+            gender_reason = st.selectbox(
+                "Пол представителя",
+                options=["", "М", "Ж"],
+                index=0 if not form.Gender_reason.data else (1 if form.Gender_reason.data == "М" else 2)
+            )
+            
+            birth_date_reason = st.date_input(
+                "Дата рождения представителя",
+                value=form.BirthDate_reason.data or None,
+                min_value=date(1900, 1, 1),
+                max_value=date.today()
+            )
+            
+            kinship_type_code = st.selectbox(
+                "Степень родства",
+                options=["", "01", "02", "03", "04", "05"],
+                format_func=lambda x: {
+                    "": "Выберите степень родства",
+                    "01": "Родитель",
+                    "02": "Опекун",
+                    "03": "Попечитель",
+                    "04": "Усыновитель",
+                    "05": "Законный представитель"
+                }.get(x, x)
+            )
+        
+        st.divider()
+        st.subheader("📄 Документы представителя")
+        
+        col7, col8 = st.columns(2)
+        
+        with col7:
+            doctype_reason = st.selectbox(
+                "Тип документа представителя",
+                options=["", "01", "02", "03", "04"],
+                format_func=lambda x: {
+                    "": "Выберите тип документа",
+                    "01": "Паспорт гражданина РФ",
+                    "02": "Загранпаспорт",
+                    "03": "Свидетельство о рождении",
+                    "04": "Другой документ"
+                }.get(x, x)
+            )
+            
+            doc_series_reason = st.text_input(
+                "Серия документа представителя",
+                value=form.doc_Series_reason.data or "",
+                placeholder="1234"
+            )
+            
+            doc_number_reason = st.text_input(
+                "Номер документа представителя",
+                value=form.doc_Number_reason.data or "",
+                placeholder="123456"
+            )
+        
+        with col8:
+            doc_issue_date_reason = st.date_input(
+                "Дата выдачи документа представителя",
+                value=form.doc_IssueDate_reason.data or None,
+                min_value=date(1900, 1, 1),
+                max_value=date.today()
+            )
+            
+            doc_issuer_reason = st.text_area(
+                "Кем выдан документ представителя",
+                value=form.doc_Issuer_reason.data or "",
+                placeholder="Отделом УФМС России по г. Москве"
+            )
+        
+        # ===== БЛОК 3: ДОПОЛНИТЕЛЬНЫЕ ПАРАМЕТРЫ =====
+        st.divider()
+        st.header("📊 Дополнительные параметры")
+        
+        col9, col10 = st.columns(2)
+        
+        with col9:
+            decision_date = st.date_input(
+                "Дата решения",
+                value=form.decision_date.data or None,
+                min_value=date(1900, 1, 1),
+                max_value=date.today()
+            )
+            
+            date_start = st.date_input(
+                "Дата начала",
+                value=form.dateStart.data or None,
+                min_value=date(1900, 1, 1)
+            )
+            
+            date_finish = st.date_input(
+                "Дата окончания",
+                value=form.dateFinish.data or None,
+                min_value=date(1900, 1, 1)
+            )
+            
+            using_sign = st.selectbox(
+                "Признак использования",
+                options=["", "Нет", "Да"],
+                index=0 if not form.usingSign.data else (1 if form.usingSign.data == "Нет" else 2)
+            )
+            
+            criteria = st.text_input(
+                "Критерий",
+                value=form.criteria.data or "",
+                placeholder="Критерий"
+            )
+            
+            criteria_code = st.text_input(
+                "Код критерия",
+                value=form.criteriaCode.data or "",
+                placeholder="Код критерия"
+            )
+        
+        with col10:
+            form_code = st.selectbox(
+                "Код формы",
+                options=["", "01", "02", "03"],
+                format_func=lambda x: {
+                    "": "Выберите",
+                    "01": "Форма 01",
+                    "02": "Форма 02",
+                    "03": "Форма 03"
+                }.get(x, x)
+            )
+            
+            amount = st.text_input(
+                "Сумма",
+                value=form.amount.data or "",
+                placeholder="15000"
+            )
+            
+            measury_code = st.selectbox(
+                "Код измерения",
+                options=["", "01", "02"],
+                format_func=lambda x: {
+                    "": "Выберите",
+                    "01": "Рубли",
+                    "02": "Проценты"
+                }.get(x, x)
+            )
+            
+            monetization = st.selectbox(
+                "Монетизация",
+                options=["", "Нет", "Да"],
+                index=0 if not form.monetization.data else (1 if form.monetization.data == "Нет" else 2)
+            )
+        
+        content = st.text_area(
+            "Содержание",
+            value=form.content.data or "",
+            placeholder="Описание содержания..."
+        )
+        
+        comment = st.text_area(
+            "Комментарий",
+            value=form.comment.data or "",
+            placeholder="Дополнительный комментарий..."
+        )
+        
+        equivalent_amount = st.text_input(
+            "Эквивалентная сумма",
+            value=form.equivalentAmount.data or "",
+            placeholder="0"
+        )
         
         st.divider()
         st.caption("Поля, отмеченные * обязательны для заполнения")
         
-        submitted = st.form_submit_button("✅ Отправить", type="primary")
+        submitted = st.form_submit_button("💾 Сохранить запись", type="primary")
         
         if submitted:
-            form.SNILS_recip.data = snils
-            form.FamilyName_recip.data = family_name
-            form.Name_recip.data = name
-            form.Patronymic_recip.data = patronymic
-            form.Gender_recip.data = gender
-            form.BirthDate_recip.data = birth_date
-            form.doc_Series_recip.data = doc_series
-            form.doc_Number_recip.data = doc_number
-            form.doc_IssueDate_recip.data = doc_issue_date
-            form.doc_Issuer_recip.data = doc_issuer
+            # Заполняем форму данными
+            form.SNILS_recip.data = snils_recip
+            form.FamilyName_recip.data = family_name_recip
+            form.Name_recip.data = name_recip
+            form.Patronymic_recip.data = patronymic_recip
+            form.Gender_recip.data = gender_recip
+            form.BirthDate_recip.data = birth_date_recip
+            form.doctype_recip.data = doctype_recip
+            form.doc_Series_recip.data = doc_series_recip
+            form.doc_Number_recip.data = doc_number_recip
+            form.doc_IssueDate_recip.data = doc_issue_date_recip
+            form.doc_Issuer_recip.data = doc_issuer_recip
+            
+            form.SNILS_reason.data = snils_reason
+            form.FamilyName_reason.data = family_name_reason
+            form.Name_reason.data = name_reason
+            form.Patronymic_reason.data = patronymic_reason
+            form.Gender_reason.data = gender_reason
+            form.BirthDate_reason.data = birth_date_reason
+            form.kinshipTypeCode.data = kinship_type_code
+            form.doctype_reason.data = doctype_reason
+            form.doc_Series_reason.data = doc_series_reason
+            form.doc_Number_reason.data = doc_number_reason
+            form.doc_IssueDate_reason.data = doc_issue_date_reason
+            form.doc_Issuer_reason.data = doc_issuer_reason
+            
+            form.decision_date.data = decision_date
+            form.dateStart.data = date_start
+            form.dateFinish.data = date_finish
+            form.usingSign.data = using_sign
+            form.criteria.data = criteria
+            form.criteriaCode.data = criteria_code
+            form.FormCode.data = form_code
+            form.amount.data = amount
+            form.measuryCode.data = measury_code
+            form.monetization.data = monetization
+            form.content.data = content
+            form.comment.data = comment
+            form.equivalentAmount.data = equivalent_amount
             
             errors = []
+            required_fields = [
+                ('SNILS_recip', 'СНИЛС получателя'),
+                ('FamilyName_recip', 'Фамилия получателя'),
+                ('Name_recip', 'Имя получателя'),
+                ('Patronymic_recip', 'Отчество получателя'),
+                ('Gender_recip', 'Пол получателя'),
+                ('BirthDate_recip', 'Дата рождения получателя'),
+                ('doctype_recip', 'Тип документа получателя'),
+                ('doc_Series_recip', 'Серия документа получателя'),
+                ('doc_Number_recip', 'Номер документа получателя'),
+                ('doc_IssueDate_recip', 'Дата выдачи документа получателя'),
+                ('doc_Issuer_recip', 'Кем выдан документ получателя')
+            ]
             
-            for field_name in ['SNILS_recip', 'FamilyName_recip', 'Name_recip', 
-                              'Patronymic_recip', 'Gender_recip', 'BirthDate_recip',
-                              'doc_Series_recip', 'doc_Number_recip', 
-                              'doc_IssueDate_recip', 'doc_Issuer_recip']:
+            for field_name, field_label in required_fields:
                 valid, msg = validate_form_field(form, field_name)
                 if not valid:
-                    field_label = getattr(getattr(form, field_name), 'label', {}).text or field_name
                     errors.append(f"{field_label}: {msg}")
             
             if errors:
@@ -454,18 +767,62 @@ def show_register():
                     
                     cursor = conn.cursor()
                     
-                    # Используем загруженные настройки
+                    # ============================================================
+                    # ПОДГОТОВКА 43 ЗНАЧЕНИЙ ДЛЯ INSERT - СТРОГО ПО ШАБЛОНУ
+                    # ============================================================
                     values = [
-                        rectype, assignmentfactuid, lmszid, categoryid, onmszcode, lmszprovidercode, providercode,
-                        snils, family_name, name, patronymic, gender, 
-                        birth_date.isoformat() if birth_date else '',
-                        '', doc_series, doc_number, 
-                        doc_issue_date.isoformat() if doc_issue_date else '',
-                        doc_issuer,
-                        '', '', '', '', '', '',
-                        '', '', '', '', '', '',
-                        '', '', '', '', '', '',
-                        '', '', '', '', '', '', ''
+                        # 1-7: Системные поля (из настроек)
+                        rectype,                                        # 1  - RecType
+                        assignmentfactuid,                              # 2  - assignmentFactUuid
+                        lmszid,                                         # 3  - LMSZID
+                        categoryid,                                     # 4  - categoryID
+                        onmszcode,                                      # 5  - ONMSZCode
+                        lmszprovidercode,                               # 6  - LMSZProviderCode
+                        providercode,                                   # 7  - providerCode
+                        
+                        # 8-18: Данные получателя (SNILS_recip)
+                        snils_recip,                                    # 8  - SNILS_recip
+                        family_name_recip,                              # 9  - FamilyName_recip
+                        name_recip,                                     # 10 - Name_recip
+                        patronymic_recip,                               # 11 - Patronymic_recip
+                        gender_recip,                                   # 12 - Gender_recip
+                        birth_date_recip.isoformat() if birth_date_recip else '',  # 13 - BirthDate_recip
+                        doctype_recip if doctype_recip else '',         # 14 - doctype_recip
+                        doc_series_recip,                               # 15 - doc_Series_recip
+                        doc_number_recip,                               # 16 - doc_Number_recip
+                        doc_issue_date_recip.isoformat() if doc_issue_date_recip else '',  # 17 - doc_IssueDate_recip
+                        doc_issuer_recip,                               # 18 - doc_Issuer_recip
+                        
+                        # 19-25: Данные представителя (SNILS_reason)
+                        snils_reason if snils_reason else '',           # 19 - SNILS_reason
+                        family_name_reason if family_name_reason else '',  # 20 - FamilyName_reason
+                        name_reason if name_reason else '',             # 21 - Name_reason
+                        patronymic_reason if patronymic_reason else '', # 22 - Patronymic_reason
+                        gender_reason if gender_reason else '',         # 23 - Gender_reason
+                        birth_date_reason.isoformat() if birth_date_reason else '',  # 24 - BirthDate_reason
+                        kinship_type_code if kinship_type_code else '', # 25 - kinshipTypeCode
+                        
+                        # 26-30: Документы представителя
+                        doctype_reason if doctype_reason else '',       # 26 - doctype_reason
+                        doc_series_reason if doc_series_reason else '', # 27 - doc_Series_reason
+                        doc_number_reason if doc_number_reason else '', # 28 - doc_Number_reason
+                        doc_issue_date_reason.isoformat() if doc_issue_date_reason else '',  # 29 - doc_IssueDate_reason
+                        doc_issuer_reason if doc_issuer_reason else '', # 30 - doc_Issuer_reason
+                        
+                        # 31-43: Дополнительные параметры
+                        decision_date.isoformat() if decision_date else '',  # 31 - decision_date
+                        date_start.isoformat() if date_start else '',   # 32 - dateStart
+                        date_finish.isoformat() if date_finish else '', # 33 - dateFinish
+                        using_sign if using_sign else '',               # 34 - usingSign
+                        criteria if criteria else '',                   # 35 - criteria
+                        criteria_code if criteria_code else '',         # 36 - criteriaCode
+                        form_code if form_code else '',                 # 37 - FormCode
+                        amount if amount else '',                       # 38 - amount
+                        measury_code if measury_code else '',           # 39 - measuryCode
+                        monetization if monetization else '',           # 40 - monetization
+                        content if content else '',                     # 41 - content
+                        comment if comment else '',                     # 42 - comment
+                        equivalent_amount if equivalent_amount else ''  # 43 - equivalentAmount
                     ]
                     
                     # Проверяем количество значений
@@ -473,7 +830,10 @@ def show_register():
                         st.error(f"❌ Ошибка: ожидается 43 значения, получено {len(values)}")
                         return
                     
-                    cursor.execute('''INSERT INTO users (
+                    # ============================================================
+                    # INSERT СТРОГО ПО ШАБЛОНУ (43 колонки)
+                    # ============================================================
+                    cursor.execute('''INSERT INTO children (
                         RecType, assignmentFactUuid, LMSZID, categoryID, ONMSZCode, LMSZProviderCode, providerCode,
                         SNILS_recip, FamilyName_recip, Name_recip, Patronymic_recip, Gender_recip, BirthDate_recip,
                         doctype_recip, doc_Series_recip, doc_Number_recip, doc_IssueDate_recip, doc_Issuer_recip,
@@ -486,54 +846,84 @@ def show_register():
                     conn.commit()
                     conn.close()
                     
-                    st.success("✅ Данные успешно добавлены!")
+                    st.success("✅ Запись успешно сохранена!")
                     st.balloons()
-                    
-                    st.session_state.page = "success"
                     st.rerun()
                     
                 except Exception as e:
                     st.error(f"❌ Ошибка при сохранении: {str(e)}")
 
 
-def show_success():
-    """Страница успешной регистрации."""
-    st.title("✅ Регистрация прошла успешно!")
-    st.balloons()
-    st.success("Данные заявителя успешно сохранены в системе ЕГИССО.")
+def show_records():
+    """Страница просмотра всех записей"""
+    st.title("📋 Список записей")
+    st.caption("Просмотр всех сохраненных записей (строго по шаблону)")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("📋 Перейти к списку записей", use_container_width=True):
-            st.session_state.page = "index"
-            st.rerun()
-    with col2:
-        if st.button("📝 Добавить новую запись", use_container_width=True):
-            st.session_state.page = "register"
-            st.rerun()
+    conn = get_db()
+    if conn is None:
+        st.error("❌ Нет подключения к базе данных")
+        return
+    
+    try:
+        df = pd.read_sql_query("SELECT * FROM children ORDER BY id DESC", conn)
+        conn.close()
+        
+        if len(df) > 0:
+            st.success(f"✅ Всего записей: {len(df)}")
+            
+            # Показываем таблицу с основными данными
+            columns_to_show = ['id', 'SNILS_recip', 'FamilyName_recip', 'Name_recip', 
+                              'Patronymic_recip', 'Gender_recip', 'BirthDate_recip']
+            show_cols = [col for col in columns_to_show if col in df.columns]
+            st.dataframe(df[show_cols], use_container_width=True)
+            
+            # Детальный просмотр
+            st.subheader("🔍 Детальный просмотр записи")
+            ids = df['id'].tolist()
+            if ids:
+                selected_id = st.selectbox("Выберите ID для просмотра", ids)
+                if selected_id:
+                    record = df[df['id'] == selected_id].iloc[0]
+                    st.json(record.to_dict())
+            
+            # Экспорт в CSV
+            st.divider()
+            st.subheader("📥 Экспорт данных")
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 Скачать CSV",
+                data=csv,
+                file_name=f"egisso_records_{date.today().isoformat()}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("📭 Нет записей в базе данных")
+    except Exception as e:
+        st.error(f"❌ Ошибка при загрузке данных: {str(e)}")
 
 
 def show_settings():
-    """Страница настроек приложения."""
-    st.title("⚙️ Настройки ЕГИССО")
-    st.caption("Управление системными настройками для полей RecType, assignmentFactUuid и др.")
+    """Страница настроек администратора"""
+    st.title("⚙️ Настройки системы")
+    st.caption("Управление системными параметрами ЕГИССО")
     
-    # Загружаем текущие настройки из БД
-    try:
-        conn = get_db()
-        if conn is None:
-            st.error("❌ Нет подключения к базе данных")
-            return
-        
-        cursor = conn.cursor()
-        cursor.execute("SELECT setting_key, setting_value, description FROM settings ORDER BY setting_key")
-        settings_data = cursor.fetchall()
-        conn.close()
-        
-        # Создаем словарь для удобства
-        settings_dict = {row[0]: {'value': row[1], 'description': row[2]} for row in settings_data}
-        
-        # Отображаем форму настроек
+    # Загружаем текущие настройки
+    conn = get_db()
+    if conn is None:
+        st.error("❌ Нет подключения к базе данных")
+        return
+    
+    cursor = conn.cursor()
+    cursor.execute("SELECT setting_key, setting_value, description FROM settings ORDER BY setting_key")
+    settings_data = cursor.fetchall()
+    conn.close()
+    
+    settings_dict = {row[0]: {'value': row[1], 'description': row[2]} for row in settings_data}
+    
+    # Создаем вкладки внутри настроек
+    tab1, tab2 = st.tabs(["📝 Редактирование", "📊 Просмотр"])
+    
+    with tab1:
         with st.form("settings_form"):
             st.subheader("📝 Основные настройки")
             st.info("Эти значения будут использоваться при создании новых записей")
@@ -587,7 +977,6 @@ def show_settings():
             st.divider()
             st.caption("Все поля обязательны для заполнения")
             
-            # Кнопки
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 submitted = st.form_submit_button("💾 Сохранить настройки", type="primary", use_container_width=True)
@@ -599,7 +988,6 @@ def show_settings():
                            new_onmszcode, new_lmszprovidercode, new_providercode]):
                     st.error("❌ Все поля должны быть заполнены!")
                 else:
-                    # Сохраняем настройки
                     settings_to_save = {
                         'rectype': new_rectype,
                         'assignmentfactuid': new_assignmentfactuid,
@@ -611,7 +999,6 @@ def show_settings():
                     }
                     
                     if save_settings_to_db(settings_to_save):
-                        # Перезагружаем настройки
                         load_settings()
                         st.success("✅ Настройки успешно сохранены!")
                         st.balloons()
@@ -620,7 +1007,6 @@ def show_settings():
                         st.error("❌ Ошибка при сохранении настроек")
             
             if reset:
-                # Сбрасываем к значениям по умолчанию
                 settings_to_save = {
                     'rectype': DEFAULT_SETTINGS['rectype'],
                     'assignmentfactuid': DEFAULT_SETTINGS['assignmentfactuid'],
@@ -637,12 +1023,10 @@ def show_settings():
                     st.rerun()
                 else:
                     st.error("❌ Ошибка при сбросе настроек")
-        
-        # Отображаем текущие значения
-        st.divider()
+    
+    with tab2:
         st.subheader("📊 Текущие значения настроек")
         
-        # Показываем в виде таблицы
         settings_df = pd.DataFrame([
             {
                 'Ключ': row[0],
@@ -653,7 +1037,6 @@ def show_settings():
         ])
         st.dataframe(settings_df, use_container_width=True, hide_index=True)
         
-        # Показываем значения, которые используются сейчас
         st.subheader("🔧 Активные настройки")
         st.json({
             'rectype': rectype,
@@ -664,9 +1047,6 @@ def show_settings():
             'lmszprovidercode': lmszprovidercode,
             'providercode': providercode
         })
-        
-    except Exception as e:
-        st.error(f"❌ Ошибка загрузки настроек: {str(e)}")
 
 
 # ==================== ОСНОВНОЕ ПРИЛОЖЕНИЕ ====================
@@ -678,45 +1058,32 @@ def main():
         st.error("❌ Не удалось инициализировать базу данных")
         return
     
-    # Загрузка настроек из БД
+    # Загрузка настроек
     load_settings()
     
-    # Боковая панель навигации
-    st.sidebar.title("📌 Навигация")
+    # Заголовок приложения
+    st.sidebar.title("📌 ЕГИССО")
+    st.sidebar.markdown("---")
     
-    if "page" not in st.session_state:
-        st.session_state.page = "index"
+    # Навигация по вкладкам
+    page = st.sidebar.radio(
+        "Выберите раздел:",
+        ["📝 Добавление новой записи", "📋 Список записей", "⚙️ Настройки"],
+        index=0
+    )
     
-    # Кнопки навигации
-    if st.sidebar.button("📋 Главная", use_container_width=True):
-        st.session_state.page = "index"
-        st.rerun()
-    
-    if st.sidebar.button("📝 Новая запись", use_container_width=True):
-        st.session_state.page = "register"
-        st.rerun()
-    
-    st.sidebar.divider()
-    st.sidebar.subheader("🔧 Администрирование")
-    
-    if st.sidebar.button("⚙️ Настройки", use_container_width=True):
-        st.session_state.page = "settings"
-        st.rerun()
-    
-    st.sidebar.divider()
-    st.sidebar.info("📊 Версия 1.0.0")
+    st.sidebar.markdown("---")
+    st.sidebar.info("📊 Версия 2.0.0")
+    st.sidebar.caption("Система регистрации заявителей")
+    st.sidebar.caption("БД строго по шаблону (43 колонки)")
     
     # Отображение выбранной страницы
-    if st.session_state.page == "index":
-        show_index()
-    elif st.session_state.page == "register":
-        show_register()
-    elif st.session_state.page == "success":
-        show_success()
-    elif st.session_state.page == "settings":
+    if page == "📝 Добавление новой записи":
+        show_add_record()
+    elif page == "📋 Список записей":
+        show_records()
+    elif page == "⚙️ Настройки":
         show_settings()
-    else:
-        show_index()
 
 
 # ==================== ТОЧКА ВХОДА ====================
