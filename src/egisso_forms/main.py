@@ -1,8 +1,13 @@
 import streamlit as st
 import sqlite3
 import os
+import csv
+import io
+import xml.etree.ElementTree as ET
+from xml.dom import minidom
 from datetime import date
 import pandas as pd
+import time
 
 # Импортируем Flask для создания контекста
 from flask import Flask, current_app
@@ -52,6 +57,21 @@ onmszcode = DEFAULT_SETTINGS['onmszcode']
 lmszprovidercode = DEFAULT_SETTINGS['lmszprovidercode']
 providercode = DEFAULT_SETTINGS['providercode']
 
+# Список всех колонок строго по шаблону
+ALL_COLUMNS = [
+    'RecType', 'assignmentFactUuid', 'LMSZID', 'categoryID', 'ONMSZCode',
+    'LMSZProviderCode', 'providerCode', 'SNILS_recip', 'FamilyName_recip',
+    'Name_recip', 'Patronymic_recip', 'Gender_recip', 'BirthDate_recip',
+    'doctype_recip', 'doc_Series_recip', 'doc_Number_recip',
+    'doc_IssueDate_recip', 'doc_Issuer_recip', 'SNILS_reason',
+    'FamilyName_reason', 'Name_reason', 'Patronymic_reason', 'Gender_reason',
+    'BirthDate_reason', 'kinshipTypeCode', 'doctype_reason',
+    'doc_Series_reason', 'doc_Number_reason', 'doc_IssueDate_reason',
+    'doc_Issuer_reason', 'decision_date', 'dateStart', 'dateFinish',
+    'usingSign', 'criteria', 'criteriaCode', 'FormCode', 'amount',
+    'measuryCode', 'monetization', 'content', 'comment', 'equivalentAmount'
+]
+
 # ==================== ФОРМА WTForms ====================
 
 class ChildCardForm(FlaskForm):
@@ -59,7 +79,7 @@ class ChildCardForm(FlaskForm):
     class Meta:
         csrf = False
     
-    # ===== ДАННЫЕ ПОЛУЧАТЕЛЯ (SNILS_recip) =====
+    # ===== ДАННЫЕ ПОЛУЧАТЕЛЯ =====
     SNILS_recip = StringField('СНИЛС получателя', validators=[
         DataRequired(message='Обязательное поле для ввода'),
         snils_validator
@@ -114,7 +134,7 @@ class ChildCardForm(FlaskForm):
         DataRequired(message='Обязательное поле для ввода')
     ])
     
-    # ===== ДАННЫЕ ПРЕДСТАВИТЕЛЯ (reason) =====
+    # ===== ДАННЫЕ ПРЕДСТАВИТЕЛЯ =====
     SNILS_reason = StringField('СНИЛС представителя', validators=[
         Optional(),
         snils_validator
@@ -221,9 +241,7 @@ def init_db():
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
         
-        # ============================================================
-        # ТАБЛИЦА children - СТРОГО ПО ШАБЛОНУ (43 колонки)
-        # ============================================================
+        # Таблица children — строго по шаблону (43 колонки)
         cursor.execute('''CREATE TABLE IF NOT EXISTS children (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             RecType TEXT NOT NULL,
@@ -272,9 +290,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         
-        # ============================================================
-        # ТАБЛИЦА settings - для настроек администратора
-        # ============================================================
+        # Таблица settings — для настроек администратора
         cursor.execute('''CREATE TABLE IF NOT EXISTS settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             setting_key TEXT UNIQUE NOT NULL,
@@ -283,7 +299,7 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         
-        # Добавляем настройки по умолчанию
+        # Добавляем настройки по умолчанию (пустые)
         cursor.execute("SELECT COUNT(*) FROM settings")
         count = cursor.fetchone()[0]
         
@@ -334,6 +350,9 @@ def load_settings():
         conn.close()
         
         for key, value in rows:
+            # Если значение None — заменяем на пустую строку
+            value = value if value is not None else ''
+            
             if key == 'rectype':
                 rectype = value
             elif key == 'assignmentfactuid':
@@ -392,6 +411,61 @@ def validate_form_field_with_context(form, field_name):
 def validate_form_field(form, field_name):
     """Валидация поля формы WTForms (обертка)"""
     return validate_form_field_with_context(form, field_name)
+
+
+# ==================== ФУНКЦИИ ЭКСПОРТА ====================
+
+def export_to_csv(df):
+    """Экспортирует DataFrame в CSV БЕЗ BOM (для совместимости с ЕГИССО Конвертор)"""
+    try:
+        # Убираем служебные колонки
+        export_df = df.drop(columns=['id', 'created_at'], errors='ignore')
+        
+        # Оставляем только колонки из шаблона в правильном порядке
+        export_df = export_df[[col for col in ALL_COLUMNS if col in export_df.columns]]
+        
+        # Конвертируем в CSV БЕЗ BOM (utf-8, а не utf-8-sig!)
+        csv_data = export_df.to_csv(index=False, sep=';', encoding='utf-8')
+        
+        # Возвращаем как bytes БЕЗ BOM
+        return csv_data.encode('utf-8')
+    except Exception as e:
+        st.error(f"❌ Ошибка экспорта в CSV: {str(e)}")
+        return None
+
+
+def export_to_xml(df):
+    """Экспортирует DataFrame в XML"""
+    try:
+        # Убираем служебные колонки
+        export_df = df.drop(columns=['id', 'created_at'], errors='ignore')
+        
+        # Оставляем только колонки из шаблона в правильном порядке
+        export_df = export_df[[col for col in ALL_COLUMNS if col in export_df.columns]]
+        
+        # Создаем корневой элемент
+        root = ET.Element("EGISSO")
+        root.set("export_date", date.today().isoformat())
+        root.set("records_count", str(len(export_df)))
+        
+        # Добавляем записи
+        for _, row in export_df.iterrows():
+            record = ET.SubElement(root, "Record")
+            for col in ALL_COLUMNS:
+                if col in row.index:
+                    field = ET.SubElement(record, col)
+                    value = row[col]
+                    field.text = str(value) if value is not None and str(value) != 'nan' else ''
+        
+        # Форматируем XML
+        xml_str = ET.tostring(root, encoding='utf-8')
+        dom = minidom.parseString(xml_str)
+        pretty_xml = dom.toprettyxml(indent="  ", encoding='utf-8')
+        
+        return pretty_xml
+    except Exception as e:
+        st.error(f"❌ Ошибка экспорта в XML: {str(e)}")
+        return None
 
 
 # ==================== СТРАНИЦЫ ПРИЛОЖЕНИЯ ====================
@@ -767,72 +841,45 @@ def show_add_record():
                     
                     cursor = conn.cursor()
                     
-                    # ============================================================
-                    # ПОДГОТОВКА 43 ЗНАЧЕНИЙ ДЛЯ INSERT - СТРОГО ПО ШАБЛОНУ
-                    # ============================================================
                     values = [
-                        # 1-7: Системные поля (из настроек)
-                        rectype,                                        # 1  - RecType
-                        assignmentfactuid,                              # 2  - assignmentFactUuid
-                        lmszid,                                         # 3  - LMSZID
-                        categoryid,                                     # 4  - categoryID
-                        onmszcode,                                      # 5  - ONMSZCode
-                        lmszprovidercode,                               # 6  - LMSZProviderCode
-                        providercode,                                   # 7  - providerCode
-                        
-                        # 8-18: Данные получателя (SNILS_recip)
-                        snils_recip,                                    # 8  - SNILS_recip
-                        family_name_recip,                              # 9  - FamilyName_recip
-                        name_recip,                                     # 10 - Name_recip
-                        patronymic_recip,                               # 11 - Patronymic_recip
-                        gender_recip,                                   # 12 - Gender_recip
-                        birth_date_recip.isoformat() if birth_date_recip else '',  # 13 - BirthDate_recip
-                        doctype_recip if doctype_recip else '',         # 14 - doctype_recip
-                        doc_series_recip,                               # 15 - doc_Series_recip
-                        doc_number_recip,                               # 16 - doc_Number_recip
-                        doc_issue_date_recip.isoformat() if doc_issue_date_recip else '',  # 17 - doc_IssueDate_recip
-                        doc_issuer_recip,                               # 18 - doc_Issuer_recip
-                        
-                        # 19-25: Данные представителя (SNILS_reason)
-                        snils_reason if snils_reason else '',           # 19 - SNILS_reason
-                        family_name_reason if family_name_reason else '',  # 20 - FamilyName_reason
-                        name_reason if name_reason else '',             # 21 - Name_reason
-                        patronymic_reason if patronymic_reason else '', # 22 - Patronymic_reason
-                        gender_reason if gender_reason else '',         # 23 - Gender_reason
-                        birth_date_reason.isoformat() if birth_date_reason else '',  # 24 - BirthDate_reason
-                        kinship_type_code if kinship_type_code else '', # 25 - kinshipTypeCode
-                        
-                        # 26-30: Документы представителя
-                        doctype_reason if doctype_reason else '',       # 26 - doctype_reason
-                        doc_series_reason if doc_series_reason else '', # 27 - doc_Series_reason
-                        doc_number_reason if doc_number_reason else '', # 28 - doc_Number_reason
-                        doc_issue_date_reason.isoformat() if doc_issue_date_reason else '',  # 29 - doc_IssueDate_reason
-                        doc_issuer_reason if doc_issuer_reason else '', # 30 - doc_Issuer_reason
-                        
-                        # 31-43: Дополнительные параметры
-                        decision_date.isoformat() if decision_date else '',  # 31 - decision_date
-                        date_start.isoformat() if date_start else '',   # 32 - dateStart
-                        date_finish.isoformat() if date_finish else '', # 33 - dateFinish
-                        using_sign if using_sign else '',               # 34 - usingSign
-                        criteria if criteria else '',                   # 35 - criteria
-                        criteria_code if criteria_code else '',         # 36 - criteriaCode
-                        form_code if form_code else '',                 # 37 - FormCode
-                        amount if amount else '',                       # 38 - amount
-                        measury_code if measury_code else '',           # 39 - measuryCode
-                        monetization if monetization else '',           # 40 - monetization
-                        content if content else '',                     # 41 - content
-                        comment if comment else '',                     # 42 - comment
-                        equivalent_amount if equivalent_amount else ''  # 43 - equivalentAmount
+                        rectype, assignmentfactuid, lmszid, categoryid, onmszcode, lmszprovidercode, providercode,
+                        snils_recip, family_name_recip, name_recip, patronymic_recip, gender_recip,
+                        birth_date_recip.isoformat() if birth_date_recip else '',
+                        doctype_recip if doctype_recip else '',
+                        doc_series_recip, doc_number_recip,
+                        doc_issue_date_recip.isoformat() if doc_issue_date_recip else '',
+                        doc_issuer_recip,
+                        snils_reason if snils_reason else '',
+                        family_name_reason if family_name_reason else '',
+                        name_reason if name_reason else '',
+                        patronymic_reason if patronymic_reason else '',
+                        gender_reason if gender_reason else '',
+                        birth_date_reason.isoformat() if birth_date_reason else '',
+                        kinship_type_code if kinship_type_code else '',
+                        doctype_reason if doctype_reason else '',
+                        doc_series_reason if doc_series_reason else '',
+                        doc_number_reason if doc_number_reason else '',
+                        doc_issue_date_reason.isoformat() if doc_issue_date_reason else '',
+                        doc_issuer_reason if doc_issuer_reason else '',
+                        decision_date.isoformat() if decision_date else '',
+                        date_start.isoformat() if date_start else '',
+                        date_finish.isoformat() if date_finish else '',
+                        using_sign if using_sign else '',
+                        criteria if criteria else '',
+                        criteria_code if criteria_code else '',
+                        form_code if form_code else '',
+                        amount if amount else '',
+                        measury_code if measury_code else '',
+                        monetization if monetization else '',
+                        content if content else '',
+                        comment if comment else '',
+                        equivalent_amount if equivalent_amount else ''
                     ]
                     
-                    # Проверяем количество значений
                     if len(values) != 43:
                         st.error(f"❌ Ошибка: ожидается 43 значения, получено {len(values)}")
                         return
                     
-                    # ============================================================
-                    # INSERT СТРОГО ПО ШАБЛОНУ (43 колонки)
-                    # ============================================================
                     cursor.execute('''INSERT INTO children (
                         RecType, assignmentFactUuid, LMSZID, categoryID, ONMSZCode, LMSZProviderCode, providerCode,
                         SNILS_recip, FamilyName_recip, Name_recip, Patronymic_recip, Gender_recip, BirthDate_recip,
@@ -846,8 +893,16 @@ def show_add_record():
                     conn.commit()
                     conn.close()
                     
-                    st.success("✅ Запись успешно сохранена!")
+                    # УВЕДОМЛЕНИЕ ОБ УСПЕХЕ
+                    st.success("✅ Запись успешно сохранена в базе данных!")
                     st.balloons()
+                    st.snow()
+                    
+                    # Показываем информацию о сохраненной записи
+                    st.info(f"📋 Сохранена запись для: **{family_name_recip} {name_recip} {patronymic_recip}** (СНИЛС: {snils_recip})")
+                    
+                    # Небольшая задержка для отображения уведомления
+                    time.sleep(2)
                     st.rerun()
                     
                 except Exception as e:
@@ -855,9 +910,9 @@ def show_add_record():
 
 
 def show_records():
-    """Страница просмотра всех записей"""
+    """Страница просмотра всех записей и экспорта данных"""
     st.title("📋 Список записей")
-    st.caption("Просмотр всех сохраненных записей (строго по шаблону)")
+    st.caption("Просмотр, фильтрация и экспорт сохраненных записей")
     
     conn = get_db()
     if conn is None:
@@ -871,33 +926,175 @@ def show_records():
         if len(df) > 0:
             st.success(f"✅ Всего записей: {len(df)}")
             
-            # Показываем таблицу с основными данными
+            # ========== ФИЛЬТРАЦИЯ ==========
+            with st.expander("🔍 Фильтры", expanded=False):
+                col_f1, col_f2 = st.columns(2)
+                
+                with col_f1:
+                    filter_snils = st.text_input("Фильтр по СНИЛС", placeholder="Введите СНИЛС...")
+                    filter_family = st.text_input("Фильтр по фамилии", placeholder="Введите фамилию...")
+                
+                with col_f2:
+                    filter_gender = st.selectbox(
+                        "Фильтр по полу",
+                        options=["Все", "М", "Ж"],
+                        index=0
+                    )
+            
+            # Применяем фильтры
+            filtered_df = df.copy()
+            
+            if filter_snils:
+                filtered_df = filtered_df[filtered_df['SNILS_recip'].str.contains(filter_snils, na=False)]
+            
+            if filter_family:
+                filtered_df = filtered_df[filtered_df['FamilyName_recip'].str.contains(filter_family, case=False, na=False)]
+            
+            if filter_gender != "Все":
+                filtered_df = filtered_df[filtered_df['Gender_recip'] == filter_gender]
+            
+            st.info(f"📊 Показано записей: {len(filtered_df)} из {len(df)}")
+            
+            # ========== ТАБЛИЦА ==========
             columns_to_show = ['id', 'SNILS_recip', 'FamilyName_recip', 'Name_recip', 
                               'Patronymic_recip', 'Gender_recip', 'BirthDate_recip']
-            show_cols = [col for col in columns_to_show if col in df.columns]
-            st.dataframe(df[show_cols], use_container_width=True)
+            show_cols = [col for col in columns_to_show if col in filtered_df.columns]
+            st.dataframe(filtered_df[show_cols], use_container_width=True)
             
-            # Детальный просмотр
+            # ========== ДЕТАЛЬНЫЙ ПРОСМОТР ==========
+            st.divider()
             st.subheader("🔍 Детальный просмотр записи")
-            ids = df['id'].tolist()
+            ids = filtered_df['id'].tolist()
             if ids:
                 selected_id = st.selectbox("Выберите ID для просмотра", ids)
                 if selected_id:
-                    record = df[df['id'] == selected_id].iloc[0]
+                    record = filtered_df[filtered_df['id'] == selected_id].iloc[0]
                     st.json(record.to_dict())
             
-            # Экспорт в CSV
+            # ========== ЭКСПОРТ ДАННЫХ ==========
             st.divider()
             st.subheader("📥 Экспорт данных")
-            csv = df.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Скачать CSV",
-                data=csv,
-                file_name=f"egisso_records_{date.today().isoformat()}.csv",
-                mime="text/csv"
-            )
+            st.caption("Выгрузка записей в форматах CSV и XML (для ЕГИССО Конвертор)")
+            
+            col_exp1, col_exp2 = st.columns(2)
+            
+            with col_exp1:
+                # Экспорт CSV (без BOM — для ЕГИССО Конвертор)
+                csv_data = export_to_csv(filtered_df)
+                if csv_data:
+                    st.download_button(
+                        label="📄 Скачать CSV (для ЕГИССО)",
+                        data=csv_data,
+                        file_name=f"egisso_records_{date.today().isoformat()}.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key="download_csv"
+                    )
+            
+            with col_exp2:
+                # Экспорт XML
+                xml_data = export_to_xml(filtered_df)
+                if xml_data:
+                    st.download_button(
+                        label="📋 Скачать XML",
+                        data=xml_data,
+                        file_name=f"egisso_records_{date.today().isoformat()}.xml",
+                        mime="application/xml",
+                        use_container_width=True,
+                        key="download_xml"
+                    )
+            
+            # ========== ЭКСПОРТ ОДНОЙ ЗАПИСИ ==========
+            if ids:
+                with st.expander("📤 Экспорт отдельной записи", expanded=False):
+                    selected_id_export = st.selectbox(
+                        "Выберите ID для экспорта",
+                        ids,
+                        key="export_single_id"
+                    )
+                    
+                    if selected_id_export:
+                        single_df = filtered_df[filtered_df['id'] == selected_id_export]
+                        
+                        col_single1, col_single2 = st.columns(2)
+                        
+                        with col_single1:
+                            single_csv = export_to_csv(single_df)
+                            if single_csv:
+                                st.download_button(
+                                    label="📄 CSV записи",
+                                    data=single_csv,
+                                    file_name=f"record_{selected_id_export}_{date.today().isoformat()}.csv",
+                                    mime="text/csv",
+                                    use_container_width=True,
+                                    key="download_single_csv"
+                                )
+                        
+                        with col_single2:
+                            single_xml = export_to_xml(single_df)
+                            if single_xml:
+                                st.download_button(
+                                    label="📋 XML записи",
+                                    data=single_xml,
+                                    file_name=f"record_{selected_id_export}_{date.today().isoformat()}.xml",
+                                    mime="application/xml",
+                                    use_container_width=True,
+                                    key="download_single_xml"
+                                )
+            
+            # ========== СТАТИСТИКА ==========
+            st.divider()
+            st.subheader("📊 Статистика")
+            
+            col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+            
+            with col_stat1:
+                st.metric("📋 Всего записей", len(df))
+            
+            with col_stat2:
+                male_count = len(df[df['Gender_recip'] == 'М']) if 'Gender_recip' in df.columns else 0
+                st.metric("👨 Мужской пол", male_count)
+            
+            with col_stat3:
+                female_count = len(df[df['Gender_recip'] == 'Ж']) if 'Gender_recip' in df.columns else 0
+                st.metric("👩 Женский пол", female_count)
+            
+            with col_stat4:
+                unique_snils = df['SNILS_recip'].nunique() if 'SNILS_recip' in df.columns else 0
+                st.metric("🔢 Уникальных СНИЛС", unique_snils)
+            
+            # ========== УДАЛЕНИЕ ЗАПИСИ ==========
+            st.divider()
+            with st.expander("🗑️ Удаление записи", expanded=False):
+                st.warning("⚠️ Внимание! Удаление записи необратимо.")
+                
+                delete_id = st.selectbox(
+                    "Выберите ID для удаления",
+                    ids,
+                    key="delete_id"
+                )
+                
+                if st.button("🗑️ Удалить запись", type="secondary"):
+                    if delete_id:
+                        try:
+                            conn = get_db()
+                            if conn:
+                                cursor = conn.cursor()
+                                cursor.execute("DELETE FROM children WHERE id = ?", (delete_id,))
+                                conn.commit()
+                                conn.close()
+                                
+                                st.success(f"✅ Запись с ID {delete_id} успешно удалена!")
+                                st.balloons()
+                                
+                                time.sleep(1)
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Ошибка при удалении: {str(e)}")
         else:
             st.info("📭 Нет записей в базе данных")
+            st.caption("Перейдите в раздел '📝 Добавление новой записи' для создания первой записи")
+    
     except Exception as e:
         st.error(f"❌ Ошибка при загрузке данных: {str(e)}")
 
@@ -926,7 +1123,8 @@ def show_settings():
     with tab1:
         with st.form("settings_form"):
             st.subheader("📝 Основные настройки")
-            st.info("Эти значения будут использоваться при создании новых записей")
+            st.info("Эти значения будут использоваться при создании новых записей. "
+                    "Если поле оставить пустым — в записи будет пустое значение.")
             
             col1, col2 = st.columns(2)
             
@@ -934,95 +1132,104 @@ def show_settings():
                 new_rectype = st.text_input(
                     "RecType (Тип записи)",
                     value=settings_dict.get('rectype', {}).get('value', ''),
-                    help="Тип записи, по умолчанию 'Fact'"
+                    placeholder="Например: Fact",
+                    help="Тип записи (необязательно)"
                 )
                 
                 new_assignmentfactuid = st.text_input(
                     "assignmentFactUuid (UUID назначения)",
                     value=settings_dict.get('assignmentfactuid', {}).get('value', ''),
-                    help="UUID назначения факта"
+                    placeholder="Например: 316d04aa-fad1-4948-94d0-0926c839c501",
+                    help="UUID назначения факта (необязательно)"
                 )
                 
                 new_lmszid = st.text_input(
                     "LMSZID (ID ЛМСЗ)",
                     value=settings_dict.get('lmszid', {}).get('value', ''),
-                    help="Идентификатор ЛМСЗ"
+                    placeholder="Например: 316d04aa-fad1-4948-94d0-0926c839c501",
+                    help="Идентификатор ЛМСЗ (необязательно)"
                 )
                 
                 new_categoryid = st.text_input(
                     "categoryID (ID категории)",
                     value=settings_dict.get('categoryid', {}).get('value', ''),
-                    help="Идентификатор категории"
+                    placeholder="Например: 1c85f0e2-15a3-4510-a717-6805d1efcf2f",
+                    help="Идентификатор категории (необязательно)"
                 )
             
             with col2:
                 new_onmszcode = st.text_input(
                     "ONMSZCode (Код ОНМСЗ)",
                     value=settings_dict.get('onmszcode', {}).get('value', ''),
-                    help="Код ОНМСЗ"
+                    placeholder="Например: A068.000001",
+                    help="Код ОНМСЗ (необязательно)"
                 )
                 
                 new_lmszprovidercode = st.text_input(
                     "LMSZProviderCode (Код поставщика ЛМСЗ)",
                     value=settings_dict.get('lmszprovidercode', {}).get('value', ''),
-                    help="Код поставщика ЛМСЗ"
+                    placeholder="Оставьте пустым, если не требуется",
+                    help="Код поставщика ЛМСЗ (необязательно)"
                 )
                 
                 new_providercode = st.text_input(
                     "providerCode (Код поставщика)",
                     value=settings_dict.get('providercode', {}).get('value', ''),
-                    help="Код поставщика"
+                    placeholder="Оставьте пустым, если не требуется",
+                    help="Код поставщика (необязательно)"
                 )
             
             st.divider()
-            st.caption("Все поля обязательны для заполнения")
+            st.caption("Все поля необязательны — можно оставить пустыми")
             
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 submitted = st.form_submit_button("💾 Сохранить настройки", type="primary", use_container_width=True)
             with col_btn2:
-                reset = st.form_submit_button("🔄 Сбросить к значениям по умолчанию", use_container_width=True)
+                reset = st.form_submit_button("🔄 Очистить все поля", use_container_width=True)
             
             if submitted:
-                if not all([new_rectype, new_assignmentfactuid, new_lmszid, new_categoryid, 
-                           new_onmszcode, new_lmszprovidercode, new_providercode]):
-                    st.error("❌ Все поля должны быть заполнены!")
-                else:
-                    settings_to_save = {
-                        'rectype': new_rectype,
-                        'assignmentfactuid': new_assignmentfactuid,
-                        'lmszid': new_lmszid,
-                        'categoryid': new_categoryid,
-                        'onmszcode': new_onmszcode,
-                        'lmszprovidercode': new_lmszprovidercode,
-                        'providercode': new_providercode
-                    }
-                    
-                    if save_settings_to_db(settings_to_save):
-                        load_settings()
-                        st.success("✅ Настройки успешно сохранены!")
-                        st.balloons()
-                        st.rerun()
-                    else:
-                        st.error("❌ Ошибка при сохранении настроек")
-            
-            if reset:
+                # Больше НЕ проверяем на обязательность — поля могут быть пустыми
                 settings_to_save = {
-                    'rectype': DEFAULT_SETTINGS['rectype'],
-                    'assignmentfactuid': DEFAULT_SETTINGS['assignmentfactuid'],
-                    'lmszid': DEFAULT_SETTINGS['lmszid'],
-                    'categoryid': DEFAULT_SETTINGS['categoryid'],
-                    'onmszcode': DEFAULT_SETTINGS['onmszcode'],
-                    'lmszprovidercode': DEFAULT_SETTINGS['lmszprovidercode'],
-                    'providercode': DEFAULT_SETTINGS['providercode']
+                    'rectype': new_rectype,
+                    'assignmentfactuid': new_assignmentfactuid,
+                    'lmszid': new_lmszid,
+                    'categoryid': new_categoryid,
+                    'onmszcode': new_onmszcode,
+                    'lmszprovidercode': new_lmszprovidercode,
+                    'providercode': new_providercode
                 }
                 
                 if save_settings_to_db(settings_to_save):
                     load_settings()
-                    st.success("🔄 Настройки сброшены к значениям по умолчанию!")
+                    st.success("✅ Настройки успешно сохранены!")
+                    st.balloons()
+                    st.snow()
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("❌ Ошибка при сбросе настроек")
+                    st.error("❌ Ошибка при сохранении настроек")
+            
+            if reset:
+                # Очищаем все поля
+                settings_to_save = {
+                    'rectype': '',
+                    'assignmentfactuid': '',
+                    'lmszid': '',
+                    'categoryid': '',
+                    'onmszcode': '',
+                    'lmszprovidercode': '',
+                    'providercode': ''
+                }
+                
+                if save_settings_to_db(settings_to_save):
+                    load_settings()
+                    st.success("🔄 Все настройки очищены!")
+                    st.balloons()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Ошибка при очистке настроек")
     
     with tab2:
         st.subheader("📊 Текущие значения настроек")
@@ -1030,7 +1237,7 @@ def show_settings():
         settings_df = pd.DataFrame([
             {
                 'Ключ': row[0],
-                'Значение': row[1],
+                'Значение': row[1] if row[1] else '(пусто)',
                 'Описание': row[2]
             }
             for row in settings_data
@@ -1039,13 +1246,13 @@ def show_settings():
         
         st.subheader("🔧 Активные настройки")
         st.json({
-            'rectype': rectype,
-            'assignmentfactuid': assignmentfactuid,
-            'lmszid': lmszid,
-            'categoryid': categoryid,
-            'onmszcode': onmszcode,
-            'lmszprovidercode': lmszprovidercode,
-            'providercode': providercode
+            'rectype': rectype if rectype else '(пусто)',
+            'assignmentfactuid': assignmentfactuid if assignmentfactuid else '(пусто)',
+            'lmszid': lmszid if lmszid else '(пусто)',
+            'categoryid': categoryid if categoryid else '(пусто)',
+            'onmszcode': onmszcode if onmszcode else '(пусто)',
+            'lmszprovidercode': lmszprovidercode if lmszprovidercode else '(пусто)',
+            'providercode': providercode if providercode else '(пусто)'
         })
 
 
@@ -1073,9 +1280,15 @@ def main():
     )
     
     st.sidebar.markdown("---")
-    st.sidebar.info("📊 Версия 2.0.0")
+    st.sidebar.info("📊 Версия 2.1.0")
     st.sidebar.caption("Система регистрации заявителей")
     st.sidebar.caption("БД строго по шаблону (43 колонки)")
+    
+    # Дополнительная информация в сайдбаре
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("📥 Экспорт")
+    st.sidebar.caption("CSV и XML доступны в разделе 'Список записей'")
+    st.sidebar.caption("CSV сохраняется БЕЗ BOM — для ЕГИССО Конвертор")
     
     # Отображение выбранной страницы
     if page == "📝 Добавление новой записи":
